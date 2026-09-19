@@ -9,7 +9,7 @@
 namespace agent {
 
 // Сетевой модуль: раз в flush_interval (или при batch_size записей)
-// упаковывает метрики в JSON Package и отправляет POST на endpoint.
+// упаковывает метрики в JSON-пакет и отправляет POST на endpoint.
 // При недоступности сервера записи возвращаются в буфер (retry),
 // не отправленные после завершения работы сбрасываются в backup.json.
 class Sender {

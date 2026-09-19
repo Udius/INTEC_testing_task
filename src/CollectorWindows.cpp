@@ -1,18 +1,14 @@
-// Реализации сборщика метрик активности по платформам:
-// Windows — Win32 API, Linux — X11 (заглушка до работы в Linux-окружении).
+// Сборщик метрик активности: Windows (Win32 API).
 #include "agent/MetricsCollector.h"
 #include "agent/Platform.h"
-
-#include <chrono>
-
-#ifdef AGENT_PLATFORM_WINDOWS
+#include "agent/TimeUtil.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 
-#include <ctime>
+#include <chrono>
 #include <string>
 
 namespace agent {
@@ -28,15 +24,6 @@ std::string WideToUtf8(const std::wstring& text) {
     WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
                         out.data(), size, nullptr, nullptr);
     return out;
-}
-
-std::string LocalTimeNow() {
-    const std::time_t now = std::time(nullptr);
-    std::tm tm{};
-    localtime_s(&tm, &now);
-    char buffer[32];
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
-    return buffer;
 }
 
 class WindowsCollector final : public MetricsCollector {
@@ -112,15 +99,3 @@ std::unique_ptr<MetricsCollector> CreateCollector(std::chrono::seconds collect_i
 }
 
 } // namespace agent
-
-#else // Linux: X11-реализация будет добавлена в Linux-окружении.
-
-namespace agent {
-
-std::unique_ptr<MetricsCollector> CreateCollector(std::chrono::seconds) {
-    return nullptr; // main сообщит, что сборщик для платформы не готов
-}
-
-} // namespace agent
-
-#endif

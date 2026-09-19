@@ -19,6 +19,10 @@
 #endif
 #include <windows.h>
 
+#elif defined(AGENT_PLATFORM_LINUX)
+
+#include <unistd.h>
+
 #endif
 
 namespace agent {
@@ -36,6 +40,12 @@ std::string ComputerName() {
             out += static_cast<char>(buffer[i]);
         }
         return out;
+    }
+#elif defined(AGENT_PLATFORM_LINUX)
+    char buffer[256];
+    if (gethostname(buffer, sizeof(buffer)) == 0) {
+        buffer[sizeof(buffer) - 1] = '\0';
+        return buffer;
     }
 #endif
     return "agent";
@@ -67,7 +77,7 @@ int main() {
 
     auto collector = CreateCollector(config.collect_interval);
     if (!collector) {
-        std::cerr << "[agent] сборщик метрик для текущей платформы не реализован" << std::endl;
+        std::cerr << "[agent] сборщик метрик для текущей платформы недоступен" << std::endl;
         return 1;
     }
 

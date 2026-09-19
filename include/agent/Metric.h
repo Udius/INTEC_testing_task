@@ -13,11 +13,4 @@ struct MetricRecord {
     bool user_active = false;  // был ли ввод (мышь/клавиатура) за интервал сбора
 };
 
-// Пакет для отправки на сервер (тело POST-запроса, application/json).
-struct Package {
-    std::string agent_id;      // идентификатор агента (имя компьютера)
-    std::int64_t timestamp = 0; // unix-время формирования пакета
-    std::vector<MetricRecord> payload;
-};
-
 } // namespace agent
