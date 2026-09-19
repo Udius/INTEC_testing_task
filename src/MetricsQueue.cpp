@@ -45,7 +45,7 @@ void MetricsQueue::Return(std::vector<MetricRecord> records) {
     // Неотправленный пакет возвращается в начало (порядок сохраняется).
     records_.insert(records_.begin(), records.begin(), records.end());
     while (records_.size() > max_size_) {
-        records_.pop_back();
+        records_.pop_front();
     }
 }
 

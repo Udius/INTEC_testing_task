@@ -11,6 +11,7 @@
 namespace agent {
 namespace {
 
+// Время таймаута при недоступном сервере
 constexpr auto kPollStep = std::chrono::milliseconds(200);
 // Пауза перед повторной попыткой после сбоя (retry backoff)
 constexpr auto kRetryBackoff = std::chrono::seconds(5);
@@ -53,7 +54,7 @@ bool Sender::SendBatch(const std::vector<MetricRecord>& records) {
 
     const auto result = client.Post("/", BuildJsonBody(records), "application/json");
     if (!result) {
-        std::cerr << "[sender] сервер недоступен, пакет остался в буфере" << std::endl;
+        std::cerr << "[sender] сервер недоступен, пакет остался в буфере." << std::endl;
         return false;
     }
     if (result->status < 200 || result->status >= 300) {
@@ -82,7 +83,10 @@ void Sender::Run() {
                 last_attempt = now();
                 if (!SendBatch(batch)) {
                     queue_.Return(std::move(batch)); // retry при восстановлении сервера
-                    // Backoff: ждём, не пытаясь слать каждую сотню мс.
+                    std::cerr << "[sender] пакет вернулся в буфер, всего в буфере "
+                                << queue_.Size() << " записей." << std::endl;
+
+                    // Backoff: ждём таймаут
                     if (!stopping) {
                         queue_.WaitForData(stop_flag_, kRetryBackoff);
                     }
