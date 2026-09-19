@@ -1,44 +1,87 @@
 ﻿# Агент мониторинга активности (C++20)
 
-Прототип консольного агента по ТЗ: в фоновом режиме собирает метрики
-активности пользователя (окно в фокусе, факт ввода), буферизует их в
-потокобезопасной очереди и периодически отправляет POST-пакетом JSON
-на демонстрационный сервер. При недоступности сервера данные остаются
-в буфере, при завершении — сбрасываются в backup.json.
+Консольный агент: в фоне собирает метрики активности пользователя
+(окно в фокусе, факт ввода), буферизует их и периодически отправляет
+POST-пакетом JSON на демонстрационный сервер. При недоступности сервера
+данные остаются в буфере (до 100 записей), при завершении по
+Ctrl+C / SIGTERM неотправленное сбрасывается в `backup.json`.
 
-## Технологический стек
-- C++20, CMake
-- Windows: Win32 API; Linux: X11 (реализация пока заглушка —
-  будет дописана в Linux-окружении)
-- Сеть/JSON: cpp-httplib + nlohmann/json
+## Что делает
 
-## Осознанные решения
-- **cpp-httplib и nlohmann/json лежат в `third_party/`** (single-header,
-  подключаются как INTERFACE-библиотека в CMake). Это выбрано вместо
-  Boost/POCO/libcurl: минимум внешних зависимостей и шагов сборки.
-  Подробности — в `third_party/README.md`.
-- **Linux/X11 — заглушка**: кодовая база платформо-независима, сборщик
-  метрик закрыт интерфейсом `MetricsCollector`; X11-реализация
-  подключается фабрикой `CreateCollector()` позже.
+- Каждые **5 секунд** фиксирует: имя процесса и заголовок окна в фокусе,
+  факт активности пользователя (мышь/клавиатура) — без кейлоггера,
+  только факт ввода.
+- Раз в **30 секунд** или при накоплении **10 записей** отправляет пакет
+  `POST /` с `Content-Type: application/json`:
 
-## Структура
+```json
+{
+  "agent_id": "DESKTOP-MIDDLE-C",
+  "timestamp": 1792147320,
+  "payload": [
+    { "time": "2026-09-15 13:55:00", "process_name": "chrome.exe",
+      "window_title": "…", "user_active": true }
+  ]
+}
 ```
-include/agent/
-  Platform.h          // платформенные макросы и защита
-  Metric.h            // MetricRecord, Package (формат API)
-  Config.h            // интервалы 5с/30с, batch 10, лимит 100, endpoint
-  MetricsCollector.h  // интерфейс сборщика + фабрика по платформе
-  MetricsQueue.h      // потокобезопасный буфер с лимитом
-  Sender.h            // цикл отправки JSON + retry
-  BackupWriter.h      // сброс буфера в backup.json
-  SignalHandler.h     // SIGINT/SIGTERM/Ctrl+C -> флаг остановки
-src/
-  main.cpp            // точка входа (пока каркас)
-third_party/          // httplib.h, nlohmann/json.hpp
-```
+
+- Сервер недоступен → пакет возвращается в буфер, повтор через 5 с.
+- Выход (Ctrl+C / SIGINT / SIGTERM) → финальная попытка отправки,
+  затем остаток в `backup.json`.
+
+## Стек
+
+- C++20, CMake (>= 3.20)
+- Windows: Win32 API; Linux: X11 (Xlib + расширение Xss из libXext)
+- Сеть/JSON: cpp-httplib и nlohmann/json — header-only, лежат в `third_party/`,
+  ничего скачивать не нужно
 
 ## Сборка
+
+Windows (Visual Studio 2022):
+
 ```
 cmake -S . -B build
-cmake --build build
+cmake --build build --config Release
 ```
+
+Linux (пакеты: `libx11-dev libxss-dev`, на Fedora — `libX11-devel libXss-devel`):
+
+```
+sudo apt install g++ cmake libx11-dev libxss-dev
+cmake -S . -B build
+cmake --build build -j
+```
+
+## Запуск
+
+1. Поднять демонстрационный сервер, принимающий POST:
+
+```
+python3 tools/demo_server.py
+```
+
+2. Запустить агента из каталога сборки:
+
+```
+./build/agent             # Linux
+build\Release\agent.exe   # Windows
+```
+
+Остановка — Ctrl+C: агент корректно завершится и при недоступном
+сервере сохранит остаток буфера в `backup.json`.
+
+## Структура
+
+```
+include/agent/        # интерфейсы модулей
+  MetricsCollector.h  # сбор метрик (Win32 / X11)
+  MetricsQueue.h      # потокобезопасный буфер с лимитом 100
+  Sender.h            # отправка JSON + retry
+  BackupWriter.h      # сброс в backup.json
+  SignalHandler.h     # Ctrl+C / SIGINT / SIGTERM
+  Config.h            # интервалы, batch, endpoint
+src/                  # реализации; коллекторы — CollectorWindows.cpp / CollectorLinux.cpp
+third_party/          # httplib.h, nlohmann/json.hpp (header-only)
+```
+

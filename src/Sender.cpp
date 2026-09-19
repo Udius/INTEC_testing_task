@@ -86,12 +86,19 @@ void Sender::Run() {
                     std::cerr << "[sender] пакет вернулся в буфер, всего в буфере "
                                 << queue_.Size() << " записей." << std::endl;
 
-                    // Backoff: ждём таймаут
+                    // Backoff: пауза до повторной попытки. WaitOrStop, а не WaitForData:
+                    // буфер не пуст (в нём вернувшийся пакет), и ожидание "до появления
+                    // данных" вернулось бы мгновенно — получился бы спам попытками.
                     if (!stopping) {
-                        queue_.WaitForData(stop_flag_, kRetryBackoff);
+                        queue_.WaitOrStop(stop_flag_, kRetryBackoff);
                     }
                 }
             }
+        } else {
+            // Условий для отправки нет, но буфер может быть не пуст — тогда
+            // WaitForData в начале цикла вернётся мгновенно, и цикл закрутится
+            // вхолостую. Выдерживаем шаг опроса и здесь.
+            queue_.WaitOrStop(stop_flag_, kPollStep);
         }
         if (stopping) {
             break;

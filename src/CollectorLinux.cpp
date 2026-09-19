@@ -57,6 +57,14 @@ std::string ReadWindowText(Display* display, ::Window window, Atom property, Ato
     return out;
 }
 
+// Асинхронные ошибки X (например, BadWindow на исчезнувшем окне) по умолчанию
+// завершают процесс. Для агента это недопустимо: окно могло закрыться между
+// определением фокуса и чтением атрибутов. Обработчик глотает ошибку —
+// XGetWindowProperty при этом вернёт пустые данные, поле останется пустым.
+int IgnoreXError(Display*, XErrorEvent*) {
+    return 0;
+}
+
 class LinuxCollector final : public MetricsCollector {
 public:
     explicit LinuxCollector(std::chrono::seconds collect_interval)
@@ -67,6 +75,9 @@ public:
             // поля окна остаются пустыми — как в Windows при отсутствии фокуса.
             std::cerr << "[collector] нет доступа к X11-сессии, метрики окна будут пустыми"
                       << std::endl;
+        } else {
+            // Ошибки X не должны убивать агент (см. IgnoreXError).
+            XSetErrorHandler(IgnoreXError);
         }
     }
 
@@ -95,11 +106,23 @@ private:
         const Atom active = XInternAtom(display_, "_NET_ACTIVE_WINDOW", False);
         ::Window window = ReadWindowLong< ::Window >(
             display_, RootWindow(display_, DefaultScreen(display_)), active, XA_WINDOW);
-        if (window == None) {
+        if (!IsValidWindow(window)) {
+            // Фолбэк: XGetInputFocus. Без фокуса возвращает псевдо-значения
+            // (None/PointerRoot=1) — их нельзя использовать как окно (BadWindow).
             int revert_to = 0;
-            XGetInputFocus(display_, &window, &revert_to);
+            ::Window focused = None;
+            if (XGetInputFocus(display_, &focused, &revert_to) && IsValidWindow(focused)) {
+                window = focused;
+            } else {
+                window = None;
+            }
         }
         return window;
+    }
+
+    // None (0) и PointerRoot (1) — не настоящие окна, опрашивать их нельзя.
+    static bool IsValidWindow(::Window window) {
+        return window != None && window != static_cast< ::Window >(1);
     }
 
     // Заголовок: _NET_WM_NAME (UTF-8) предпочтительнее старого WM_NAME.
@@ -132,7 +155,7 @@ private:
         return name;
     }
 
-    // Миллисекунды с последнего ввода мыши/клавиатуры (расширение Xss из libXext).
+    // Миллисекунды с последнего ввода мыши/клавиатуры (расширение Xss, libxss).
     // 0 при недоступности расширения => пользователь считается активным
     // (та же политика, что в Windows-ветке при ошибке GetLastInputInfo).
     long IdleTimeMs() const {

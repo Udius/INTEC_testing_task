@@ -32,6 +32,10 @@ public:
     // true — есть данные; false — таймаут или остановка.
     bool WaitForData(std::atomic<bool>& stop_flag, std::chrono::milliseconds timeout);
 
+    // Ждать только флага остановки или таймаута, игнорируя данные.
+    // Для backoff после сбоя отправки: буфер не пуст, но слать нельзя.
+    void WaitOrStop(std::atomic<bool>& stop_flag, std::chrono::milliseconds timeout);
+
     // Разбудить ожидающего (например, при выставлении флага остановки).
     void NotifyAll();
 

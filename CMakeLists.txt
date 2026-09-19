@@ -10,7 +10,6 @@ target_include_directories(third_party INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/thi
 
 add_executable(agent
     src/main.cpp
-    src/Collector.cpp
     src/MetricsQueue.cpp
     src/Sender.cpp
     src/BackupWriter.cpp
@@ -25,10 +24,15 @@ if (MSVC)
 endif()
 
 if (WIN32)
+    target_sources(agent PRIVATE src/CollectorWindows.cpp)
     # cpp-httplib (winsock)
     target_link_libraries(agent PRIVATE ws2_32)
 else()
+    target_sources(agent PRIVATE src/CollectorLinux.cpp)
     find_package(Threads REQUIRED)
     target_link_libraries(agent PRIVATE Threads::Threads)
-    # TODO: X11-реализация сборщика (src/Collector.cpp) — в Linux-окружении.
+    # X11: Xlib — окно в фокусе; Xss (X Screen Saver, пакет libxss-dev) —
+    # простой с последнего ввода. CMake знает Xss как компонент X11.
+    find_package(X11 REQUIRED COMPONENTS Xss)
+    target_link_libraries(agent PRIVATE X11::X11 X11::Xss)
 endif()

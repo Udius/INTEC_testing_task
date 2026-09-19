@@ -56,6 +56,13 @@ bool MetricsQueue::WaitForData(std::atomic<bool>& stop_flag, std::chrono::millis
     });
 }
 
+void MetricsQueue::WaitOrStop(std::atomic<bool>& stop_flag, std::chrono::milliseconds timeout) {
+    std::unique_lock lock(mutex_);
+    cv_.wait_for(lock, timeout, [&] {
+        return stop_flag.load(std::memory_order_relaxed);
+    });
+}
+
 void MetricsQueue::NotifyAll() {
     cv_.notify_all();
 }
